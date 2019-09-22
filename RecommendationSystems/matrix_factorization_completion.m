@@ -1,0 +1,118 @@
+% Recommender Systemes
+clc
+%rand('seed',1);   randn('seed',1);
+
+% (I) Matrix factorization
+% ========================
+% (1) Define movies/users (rows/cols) matrix 
+Y = [1 1 5 4;2 1 4 5;4 5 2 1;5 4 2 1; 4 5 1 2;1 2 5 5];
+
+[nm, nu] = size(Y);     % number of movies, and number of users
+nf = 3;     % number of features (should be less than nu and nm)
+% (2) Factorization using SVD
+[U,S,V] = svd(Y, 'econ');
+t0 = diag(S);
+mf_1 = U(:,1:nf)*diag(t0(1:nf));     % features per movie
+uf_1 = V(:,1:nf);                         % features per user
+Y_svd = mf_1*uf_1';   % approximate matrix
+err_svd = norm(Y-Y_svd,'fro')
+
+% (3) Factorization using Gradient Descent
+[Y_gd, ~, ~, ~, ~] = matrix_completion(Y, nf);
+err_gd = norm(Y_gd - Y,'fro')
+
+% (II) Matrix Completion
+% ======================
+% (1) Construct matrix with missing elements
+n_invalid = 5;
+Y_missing = Y;
+t0 = randperm(numel(Y));
+Y_missing(t0(1:n_invalid)) = NaN;
+% (2) Apply gradient descent methods
+[Y_complete, ~, ~, ~, ~] = matrix_completion(Y_missing, nf);
+err_complete = norm(Y_complete - Y,'fro')
+
+
+return
+
+
+
+
+% OLD IMPLEMENTATION
+% ------------------
+
+% (3) Factorization using Gradient Descent
+mf_2 = randn(nm,nf);    % x
+uf_2 = randn(nu,nf);    % theta
+lambda = 1e-2;             % regularization parameter
+learning_rate = 1e-2;   % for gradient descent
+delta = 1e-4;           % stopping condition
+x_hat = zeros(size(mf_2));        % initialize
+theta_hat = zeros(size(uf_2));    % initialize
+stop = 0;               % boolean flag
+old_loss = 1e6;         % large number
+while ~stop
+  dif = mf_2*uf_2' - Y;
+  % Gradients
+  for i=1:nm
+    x_hat(i,:) = sum(uf_2 .* (dif(i,:)'*ones(1,nf)));
+  end
+  G_x = x_hat + lambda*mf_2;
+  for j=1:nu
+    theta_hat(j,:) = sum(mf_2 .* (dif(:,j)*ones(1,nf)));
+  end
+  G_theta = theta_hat + lambda*uf_2;
+  % Update x and theta
+  mf_2 = mf_2 - learning_rate * G_x;
+  uf_2 = uf_2 - learning_rate * G_theta;
+  % Compute loss
+  loss = (sum(dif(:).^2) + lambda * (sum(mf_2(:).^2) + sum(uf_2(:).^2))) / 2;
+  % stopping condition
+  if abs(loss-old_loss) < delta
+    stop = 1;
+  end
+  old_loss = loss;
+end
+Y_2 = mf_2*uf_2';   % approximate matrix
+err_gd = norm(Y-Y_2,'fro')
+
+
+% (II) Matrix Completion
+% ======================
+% (1) Construct matrix with missing elements
+n_invalid = 5;
+Y_missing = Y;
+t0 = randperm(numel(Y));
+Y_missing(t0(1:n_invalid)) = NaN;
+% (2) Apply gradient descent methods
+mf_2 = randn(nm,nf);    % x
+uf_2 = randn(nu,nf);    % theta
+stop = 0;               % boolean flag
+old_loss = 1e9;         % large number
+k = 0;
+while ~stop
+  dif = mf_2*uf_2' - Y_missing;
+  % Gradients
+  for i=1:nm
+    x_hat(i,:) = nansum(uf_2 .* (dif(i,:)'*ones(1,nf)));
+  end
+  G_x = x_hat + lambda*mf_2;
+  for j=1:nu
+    theta_hat(j,:) = nansum(mf_2 .* (dif(:,j)*ones(1,nf)));
+  end
+  G_theta = theta_hat + lambda*uf_2;
+  % Update x and theta
+  mf_2 = mf_2 - learning_rate * G_x;
+  uf_2 = uf_2 - learning_rate * G_theta;
+  % Compute loss
+  loss = (nansum(dif(:).^2) + lambda * (sum(mf_2(:).^2) + sum(uf_2(:).^2))) / 2;
+  % stopping condition
+  if abs(loss-old_loss) < delta
+    stop = 1;
+  end
+  old_loss = loss;
+  k = k+1;
+end
+k
+Y_3 = mf_2*uf_2';   % approximate matrix
+err_missing = norm(Y-Y_3,'fro')
